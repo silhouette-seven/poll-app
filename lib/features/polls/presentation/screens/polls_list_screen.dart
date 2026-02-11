@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:poll_app/features/common/wave_state.dart';
 import 'package:poll_app/features/polls/presentation/widgets/poll_card.dart';
 import 'package:poll_app/features/polls/providers/poll_providers.dart';
-import 'package:poll_app/features/polls/data/local_poll_storage.dart';
 
 class PollsListScreen extends ConsumerWidget {
   const PollsListScreen({super.key});

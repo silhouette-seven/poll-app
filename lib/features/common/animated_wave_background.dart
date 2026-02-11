@@ -15,55 +15,50 @@ class AnimatedWaveBackground extends ConsumerStatefulWidget {
 }
 
 class _AnimatedWaveBackgroundState extends ConsumerState<AnimatedWaveBackground>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
+    with TickerProviderStateMixin {
+  late AnimationController _waveController;
+  late AnimationController _colorController;
 
-  List<Color> _displayColors = const [
-    Color(0xFF6B4EFF),
-    Color(0xFF448AFF),
-    Color(0xFF536DFE),
-  ];
-  List<Color> _previousColors = const [
-    Color(0xFF6B4EFF),
-    Color(0xFF448AFF),
-    Color(0xFF536DFE),
-  ];
-  List<Color>? _lastTargetColors;
-  double _colorT = 1.0;
+  late List<Color> _currentColors;
+  late List<Color> _targetColors;
+  late List<Color> _previousColors;
 
   @override
   void initState() {
     super.initState();
-    // Very long duration so movement is imperceptibly slow
-    _animController = AnimationController(
+    // Continuous wave animation (30s loop)
+    _waveController = AnimationController(
       vsync: this,
-      duration: const Duration(hours: 1),
-    )..repeat(); // Linear 0→1 over an hour — no perceptible loop
+      duration: const Duration(seconds: 30),
+    )..repeat();
+
+    // Color transition animation
+    _colorController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    const initialColors = [
+      Color(0xFF6B4EFF),
+      Color(0xFF448AFF),
+      Color(0xFF536DFE),
+    ];
+    _currentColors = initialColors;
+    _previousColors = initialColors;
+    _targetColors = initialColors;
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _waveController.dispose();
+    _colorController.dispose();
     super.dispose();
-  }
-
-  void _updateColors(List<Color> newColors) {
-    if (_lastTargetColors == null ||
-        !_colorsEqual(_lastTargetColors!, newColors)) {
-      _previousColors = _displayColors;
-      _lastTargetColors = newColors;
-      _colorT = 0.0;
-    }
-    if (_colorT < 1.0) {
-      _colorT = (_colorT + 0.012).clamp(0.0, 1.0);
-      _displayColors = _lerpColors(_previousColors, newColors, _colorT);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final waveState = ref.watch(waveStateProvider);
-    _updateColors(waveState.colors);
+    final newColors = waveState.colors;
 
     // Watch connectivity
     final connectivityAsync = ref.watch(connectivityStreamProvider);
@@ -73,23 +68,58 @@ class _AnimatedWaveBackgroundState extends ConsumerState<AnimatedWaveBackground>
       });
     });
 
+    // Trigger color transition if target changes
+    if (!_colorsEqual(_targetColors, newColors)) {
+      _previousColors = List.of(_currentColors);
+      _targetColors = newColors;
+
+      // Logic:
+      // If it's an event (Success/Error), we want a "pulse" effect:
+      // 1. Go to new color (forward)
+      // 2. Return to idle (reverse) - handled by WaveNotifier logic usually,
+      //    but here we ensure the transition itself is smooth.
+      // If the waveState resets automatically, this will just animate to new target.
+
+      _colorController.forward(from: 0.0);
+    }
+
+    // Update current colors during transition
+    if (_colorController.isAnimating || _colorController.isCompleted) {
+      // Use curves for smoother visual transition
+      final t = Curves.easeInOutCubic.transform(_colorController.value);
+      _currentColors = _lerpColors(_previousColors, _targetColors, t);
+    }
+
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Stack(
       children: [
-        // Gradient — repaints via the animation's repaint parameter
-        // No setState, no AnimatedBuilder, no widget rebuilds at all
         Positioned.fill(
           child: RepaintBoundary(
-            child: CustomPaint(
-              painter: _GradientPainter(
-                animation: _animController,
-                colors: _displayColors,
-              ),
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_waveController, _colorController]),
+              builder: (context, child) {
+                // Interpolate colors based on controller value
+                final t = Curves.easeInOutCubic.transform(
+                  _colorController.value,
+                );
+                final displayColors = _lerpColors(
+                  _previousColors,
+                  _targetColors,
+                  t,
+                );
+
+                return CustomPaint(
+                  painter: _GradientPainter(
+                    animation: _waveController,
+                    colors: displayColors,
+                  ),
+                );
+              },
             ),
           ),
         ),
-        // Frosted glass
+        // Frosted glass overlay
         Positioned.fill(
           child: ClipRect(
             child: BackdropFilter(
@@ -98,7 +128,7 @@ class _AnimatedWaveBackgroundState extends ConsumerState<AnimatedWaveBackground>
             ),
           ),
         ),
-        // Content — never touched by animation
+        // Content
         widget.child,
       ],
     );
@@ -119,24 +149,19 @@ class _AnimatedWaveBackgroundState extends ConsumerState<AnimatedWaveBackground>
   }
 }
 
-/// Uses CustomPainter's `repaint` parameter to drive repainting
-/// directly from the animation — zero widget rebuilds.
 class _GradientPainter extends CustomPainter {
   final Animation<double> animation;
   final List<Color> colors;
 
-  _GradientPainter({required this.animation, required this.colors})
-    : super(repaint: animation);
+  _GradientPainter({required this.animation, required this.colors});
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = animation.value;
     for (int i = 0; i < colors.length; i++) {
-      // Slow sinusoidal drift using tiny fractions of t
-      // With 1-hour duration, t changes ~0.00028 per second
-      // sin wraps smoothly, so no boundary at all
-      final phase = t * 2 * pi * 3; // 3 full slow cycles over the hour
-      final offset = i * 2.094; // 120° apart
+      final phase = t * 2 * pi;
+      final offset = i * 2.094;
+
       final cx = size.width * (0.5 + 0.25 * sin(phase + offset));
       final cy = size.height * (0.4 + 0.2 * cos(phase * 0.7 + offset));
       final radius =
@@ -155,5 +180,7 @@ class _GradientPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GradientPainter oldDelegate) => true;
+  bool shouldRepaint(_GradientPainter oldDelegate) =>
+      oldDelegate.animation.value != animation.value ||
+      oldDelegate.colors != colors;
 }

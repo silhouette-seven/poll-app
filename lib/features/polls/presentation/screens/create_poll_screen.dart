@@ -33,7 +33,10 @@ class _CreatePollScreenState extends ConsumerState<CreatePollScreen> {
   }
 
   Future<void> _createPoll() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ref.read(waveStateProvider).triggerError();
+      return;
+    }
     setState(() => _isLoading = true);
 
     try {
