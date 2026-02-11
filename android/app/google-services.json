@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "212074483378",
+    "project_id": "poll-app-d6daf",
+    "storage_bucket": "poll-app-d6daf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:212074483378:android:3b9b707016ac005bcc43ab",
+        "android_client_info": {
+          "package_name": "com.example.poll_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQeVAm8KE9vq0XSaBBsLnkdb0vZCl1YLU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
